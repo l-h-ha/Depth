@@ -1,7 +1,11 @@
 from ..lib._tensor import Tensor
 
-a = Tensor([0, 0, 0])
-b = Tensor([1, 1, 1])
-print(a + b)
-print(a * b)
-print(a @ b)
+a = Tensor([1, 0, 0], requires_grad=True)
+b = Tensor([1, 2, 3], requires_grad=True)
+c = a @ b
+d = c + a
+e = d - c
+f = e * c
+g = f * a
+
+g.backward()

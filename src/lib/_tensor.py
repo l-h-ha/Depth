@@ -7,86 +7,219 @@ import numpy.typing as npt
 type tdata = Union[np.ndarray, np.floating, np.integer, list, tuple, int, float]
 
 def convert(data: tdata, dtype: npt.DTypeLike) -> np.ndarray:
-    if isinstance(data, np.ndarray) and data.dtype == dtype:
-        return data
+    if isinstance(data, np.ndarray):
+        if data.dtype == dtype:
+            return data
+        return data.astype(dtype=dtype)
     if isinstance(data, (int, float, np.floating, np.integer)):
         return np.asarray([data]).astype(dtype=dtype)
     elif isinstance(data, (tuple, list)):
         return np.asarray(data).astype(dtype=dtype)
-    elif isinstance(data, np.ndarray):
-        return data.astype(dtype=dtype)
     else:
         raise ValueError(f'Unsupported datatype for conversion: {type(data)}')
+
+def _sum_to_shape(grad: np.ndarray, target: np.ndarray) -> np.ndarray:
+    '''
+    Broadcasts/reduces grad to a given shape.
+
+    Compare both shapes:
+    grad: (D0, D1, ..., DN)
+    target: (D0, D1, ..., DM)
+        
+    '''
     
-def _perform_op(a: Tensor | tdata, b: Tensor | tdata, func: Callable[[np.ndarray, np.ndarray], np.ndarray], dtype: npt.DTypeLike) -> Tensor:
+    target_shape = target.shape
+    if grad.shape == target.shape:
+        return grad
+    
+    ndim_diff = grad.ndim - len(target_shape)
+    if ndim_diff < 0:
+        raise ValueError("Gradient cannot have fewer dimensions than the target shape.")
+    
+    padded_target_shape = (1,)*ndim_diff + target_shape
+    axes_to_sum = []
+    for i, (grad_dim, target_dim) in enumerate(zip(grad.shape, padded_target_shape)):
+        if grad_dim != target_dim:
+            if target_dim == 1:
+                axes_to_sum.append(i)
+            else:
+                raise ValueError(f'Shapes {grad.shape} and {target_shape} are not broadcast-compatible for summation.')
+    
+    if axes_to_sum:
+        summed_grad = np.sum(grad, axis=tuple(axes_to_sum), keepdims=True)
+    else:
+        summed_grad = grad
+    return summed_grad.reshape(target_shape)
+
+def _backward_sum(a: Tensor, b: Tensor, result: Tensor) -> None:
+    def _backward() -> None:
+        a.grad += _sum_to_shape(result.grad * 1, a.grad)
+        b.grad += _sum_to_shape(result.grad * 1, b.grad)
+    result._backward = _backward
+
+def _backward_sub(a: Tensor, b: Tensor, result: Tensor) -> None:
+    def _backward() -> None:
+        a.grad += _sum_to_shape(result.grad * 1, a.grad)
+        b.grad += _sum_to_shape(result.grad * -1, b.grad)
+    result._backward = _backward
+
+def _backward_mul(a: Tensor, b: Tensor, result: Tensor) -> None:
+    def _backward() -> None:
+        a.grad += _sum_to_shape(result.grad * b.data, a.grad)
+        b.grad += _sum_to_shape(result.grad * a.data, b.grad)
+    result._backward = _backward
+
+def _backward_div(a: Tensor, b: Tensor, result: Tensor) -> None:
+    def _backward() -> None:
+        a.grad += _sum_to_shape(result.grad * (1 / b.data), a.grad)
+        b.grad += _sum_to_shape(result.grad * (a.data * -(1 / (b.data**2))), b.grad)
+    result._backward = _backward
+
+def _backward_matmul(a: Tensor, b: Tensor, result: Tensor) -> None:
+    def _backward() -> None:
+        #* Vec-vec product
+        if a.ndim == 1 and b.ndim == 1:
+            a.grad += result.grad * b.grad
+            b.grad += result.grad * a.grad
+        #* Mat-vec product
+        elif a.ndim == 2 and b.ndim == 1:
+            a.grad += np.outer(result.grad, b.data)
+            b.grad += a.grad.T @ result.grad
+        elif a.ndim == 1 and b.data.ndim == 2:
+            a.grad += b.grad.T @ result.grad
+            b.grad += np.outer(result.grad, a.data)
+        #* Mat-mat product or Ten-ten product
+        else:
+            a.grad += result.grad @ b.data.T
+            b.grad += a.data.T @ result.grad
+    result._backward = _backward
+
+def _backward_neg(a: Tensor, result: Tensor) -> None:
+    def _backward() -> None:
+        a.grad += result.grad * -1
+    result._backward = _backward
+
+def _backward_transpose(a: Tensor, result: Tensor) -> None:
+    def _backward() -> None:
+        a.grad += result.grad.T
+    result._backward = _backward
+
+def _perform_op(a: Tensor | tdata, b: Tensor | tdata, func: Callable[[np.ndarray, np.ndarray], np.ndarray], backward_func: Callable[[Tensor, Tensor, Tensor], None], dtype: npt.DTypeLike) -> Tensor:
+    a = a if isinstance(a, Tensor) else Tensor(data=convert(a, dtype=dtype), requires_grad=False, dtype=dtype)
+    b = b if isinstance(b, Tensor) else Tensor(data=convert(b, dtype=dtype), requires_grad=False, dtype=dtype)
+    result = Tensor(data=func(a.data, b.data), prev=(a, b), requires_grad=a.requires_grad or b.requires_grad, dtype=dtype)
+
+    if a.requires_grad or b.requires_grad:
+        backward_func(a, b, result)
+    return result
+
+def _perform_in_op(a: Tensor | tdata, b: Tensor | tdata, func: Callable[[np.ndarray, np.ndarray], np.ndarray], dtype: npt.DTypeLike) -> Tensor:
     a = a if isinstance(a, Tensor) else Tensor(data=convert(a, dtype=dtype), dtype=dtype)
     b = b if isinstance(b, Tensor) else Tensor(data=convert(b, dtype=dtype), dtype=dtype)
-    return Tensor(data=func(a.data, b.data), dtype=dtype)
+
+    if a.requires_grad or b.requires_grad:
+        raise RuntimeError("In-place operations must not be performed on tensor objects.")
+
+    a.data = func(a.data, b.data)
+    return a
 
 class Tensor():
-    def __init__(self, data: tdata, dtype: npt.DTypeLike = np.float32):
-        self.data: np.ndarray = convert(data=data, dtype=dtype)
-        self.grad: np.ndarray = np.zeros_like(self.data, dtype=dtype)
+    def __init__(self, data: tdata, prev: tuple=(), requires_grad: bool=False, dtype: npt.DTypeLike=np.float32):
+        self.data = convert(data=data, dtype=dtype)
+        self.grad = np.zeros_like(self.data, dtype=dtype)
         
         self.dtype = dtype
+        self.prev = prev
+        self._backward = lambda: None
+        self.requires_grad = requires_grad
+
+        self.shape = self.data.shape
+        self.ndim = self.data.ndim
+
+    def backward(self) -> None:
+        chain: list[Tensor] = []
+        visit: set[Tensor] = set()
+
+        def build(t: Tensor) -> None:
+            if t in visit:
+                return
+            visit.add(t)
+            for t_prev in t.prev:
+                build(t_prev)
+            chain.append(t)
+
+        self.grad = np.ones_like(self.data, dtype=self.dtype)
+        build(self)
+
+        for t in reversed(chain):
+            print(t)
+            t._backward()
+            print(t._backward)
+            print(t.grad, "\n\n")
+
+        print(chain)
+
+    def transpose(self) -> Tensor:
+        result = Tensor(self.data.T, prev=(self,), requires_grad=self.requires_grad, dtype=self.dtype)
+        if result.requires_grad:
+            _backward_transpose(self, result)
+        return result
 
     def __add__(self, other: Tensor | tdata) -> Tensor:
-        return _perform_op(self, other, func=lambda a, b: a + b, dtype=self.dtype)
+        return _perform_op(self, other, func=lambda a, b: a + b, backward_func=_backward_sum, dtype=self.dtype)
     
     def __radd__(self, other: Tensor | tdata) -> Tensor:
-        return _perform_op(other, self, func=lambda a, b: b + a, dtype=self.dtype)
+        return _perform_op(other, self, func=lambda a, b: b + a, backward_func=_backward_sum, dtype=self.dtype)
     
     def __iadd__(self, other: Tensor | tdata) -> Tensor:
-        self.data += other.data if isinstance(other, Tensor) else convert(other, self.dtype)
-        return self
+        return _perform_in_op(self, other, func=lambda a, b: a + b, dtype=self.dtype)
     
 
     def __sub__(self, other: Tensor | tdata) -> Tensor:
-        return _perform_op(self, other, func=lambda a, b: a - b, dtype=self.dtype)
+        return _perform_op(self, other, func=lambda a, b: a - b, backward_func=_backward_sub, dtype=self.dtype)
     
     def __rsub__(self, other: Tensor | tdata) -> Tensor:
-        return _perform_op(other, self, func=lambda a, b: b - a, dtype=self.dtype)
+        return _perform_op(other, self, func=lambda a, b: b - a, backward_func=_backward_sub, dtype=self.dtype)
 
     def __isub__(self, other: Tensor | tdata) -> Tensor:
-        self.data -= other.data if isinstance(other, Tensor) else convert(other, self.dtype)
-        return self
+        return _perform_in_op(self, other, func=lambda a, b: a - b, dtype=self.dtype)
     
 
     def __mul__(self, other: Tensor | tdata) -> Tensor:
-        return _perform_op(self, other, func=lambda a, b: a * b, dtype=self.dtype)
+        return _perform_op(self, other, func=lambda a, b: a * b, backward_func=_backward_mul, dtype=self.dtype)
     
     def __rmul__(self, other: Tensor | tdata) -> Tensor:
-        return _perform_op(other, self, func=lambda a, b: b * a, dtype=self.dtype)
+        return _perform_op(other, self, func=lambda a, b: b * a, backward_func=_backward_mul, dtype=self.dtype)
 
     def __imul__(self, other: Tensor | tdata) -> Tensor:
-        self.data *= other.data if isinstance(other, Tensor) else convert(other, self.dtype)
-        return self
+        return _perform_in_op(self, other, func=lambda a, b: a * b, dtype=self.dtype)
     
 
     def __truediv__(self, other: Tensor | tdata) -> Tensor:
-        return _perform_op(self, other, func=lambda a, b: a / b, dtype=self.dtype)
+        return _perform_op(self, other, func=lambda a, b: a / b, backward_func=_backward_div, dtype=self.dtype)
     
     def __rtruediv__(self, other: Tensor | tdata) -> Tensor:
-        return _perform_op(other, self, func=lambda a, b: b / a, dtype=self.dtype)
+        return _perform_op(other, self, func=lambda a, b: b / a, backward_func=_backward_div, dtype=self.dtype)
     
     def __itruediv__(self, other: Tensor | tdata) -> Tensor:
-        self.data /= other.data if isinstance(other, Tensor) else convert(other, self.dtype)
-        return self
+        return _perform_in_op(self, other, func=lambda a, b: a / b, dtype=self.dtype)
     
 
     def __matmul__(self, other: Tensor | tdata) -> Tensor:
-        return _perform_op(self, other, func=lambda a, b: a @ b, dtype=self.dtype)
+        return _perform_op(self, other, func=lambda a, b: a @ b, backward_func=_backward_matmul, dtype=self.dtype)
     
     def __rmatmul__(self, other: Tensor | tdata) -> Tensor:
-        return _perform_op(other, self, func=lambda a, b: b @ a, dtype=self.dtype)
+        return _perform_op(other, self, func=lambda a, b: b @ a, backward_func=_backward_matmul, dtype=self.dtype)
 
     def __imatmul__(self, other: Tensor | tdata) -> Tensor:
-        self.data @= other.data if isinstance(other, Tensor) else convert(other, self.dtype)
-        return self
+        return _perform_in_op(self, other, func=lambda a, b: a @ b, dtype=self.dtype)
     
 
     def __neg__(self):
-        return Tensor(data=-self.data, dtype=self.dtype)
+        result = Tensor(data=-self.data, prev=(self,), requires_grad=self.requires_grad, dtype=self.dtype)
+        if result.requires_grad:
+            _backward_neg(self, result)
+        return result
 
     def __repr__(self) -> str:
         return f'Tensor({self.data})'
