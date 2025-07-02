@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Callable, Union
+from typing import Callable, Union, Optional
 
 import numpy as np
 import numpy.typing as npt
@@ -79,19 +79,23 @@ def _backward_matmul(a: Tensor, b: Tensor, result: Tensor) -> None:
     def _backward() -> None:
         #* Vec-vec product
         if a.ndim == 1 and b.ndim == 1:
-            a.grad += result.grad * b.grad
-            b.grad += result.grad * a.grad
+            a.grad += result.grad * b.data
+            b.grad += result.grad * a.data
         #* Mat-vec product
         elif a.ndim == 2 and b.ndim == 1:
             a.grad += np.outer(result.grad, b.data)
-            b.grad += a.grad.T @ result.grad
-        elif a.ndim == 1 and b.data.ndim == 2:
-            a.grad += b.grad.T @ result.grad
-            b.grad += np.outer(result.grad, a.data)
-        #* Mat-mat product or Ten-ten product
-        else:
-            a.grad += result.grad @ b.data.T
             b.grad += a.data.T @ result.grad
+        #* Vec-mat product
+        elif a.ndim == 1 and b.data.ndim == 2:
+            a.grad += b.data.T @ result.grad
+            b.grad += np.outer(result.grad, a.data)
+        #* Mat-mat product or ten-ten product
+        else:
+            #! This is mathematically incorrect. But this is standard in ML implementations.   
+            grad_a = result.grad @ b.data.swapaxes(-2, -1)
+            grad_b = a.data.swapaxes(-2, -1) @ result.grad
+            a.grad += _sum_to_shape(grad_a, a.grad)
+            b.grad += _sum_to_shape(grad_b, b.grad)
     result._backward = _backward
 
 def _backward_neg(a: Tensor, result: Tensor) -> None:
@@ -136,7 +140,7 @@ class Tensor():
         self.shape = self.data.shape
         self.ndim = self.data.ndim
 
-    def backward(self) -> None:
+    def backward(self, gradient: Optional[np.ndarray]=None) -> None:
         chain: list[Tensor] = []
         visit: set[Tensor] = set()
 
@@ -147,17 +151,15 @@ class Tensor():
             for t_prev in t.prev:
                 build(t_prev)
             chain.append(t)
+        
+        if gradient:
+            self.grad = gradient
+        else:
+            self.grad = np.ones_like(self.data, dtype=self.dtype)
 
-        self.grad = np.ones_like(self.data, dtype=self.dtype)
         build(self)
-
         for t in reversed(chain):
-            print(t)
             t._backward()
-            print(t._backward)
-            print(t.grad, "\n\n")
-
-        print(chain)
 
     def transpose(self) -> Tensor:
         result = Tensor(self.data.T, prev=(self,), requires_grad=self.requires_grad, dtype=self.dtype)
