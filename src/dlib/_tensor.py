@@ -18,7 +18,7 @@ def convert(data: tdata, dtype: npt.DTypeLike) -> np.ndarray:
     else:
         raise ValueError(f'Unsupported datatype for conversion: {type(data)}')
 
-def _sum_to_shape(grad: np.ndarray, target: np.ndarray) -> np.ndarray:
+def _sum_to_shape(grad: np.ndarray, target_shape: tuple) -> np.ndarray:
     '''
     Broadcasts/reduces grad to a given shape.
 
@@ -28,8 +28,7 @@ def _sum_to_shape(grad: np.ndarray, target: np.ndarray) -> np.ndarray:
         
     '''
     
-    target_shape = target.shape
-    if grad.shape == target.shape:
+    if grad.shape == target_shape:
         return grad
     
     ndim_diff = grad.ndim - len(target_shape)
@@ -53,26 +52,26 @@ def _sum_to_shape(grad: np.ndarray, target: np.ndarray) -> np.ndarray:
 
 def _backward_sum(a: Tensor, b: Tensor, result: Tensor) -> None:
     def _backward() -> None:
-        a.grad += _sum_to_shape(result.grad * 1, a.grad)
-        b.grad += _sum_to_shape(result.grad * 1, b.grad)
+        a.grad += _sum_to_shape(result.grad * 1, a.shape)
+        b.grad += _sum_to_shape(result.grad * 1, b.shape)
     result._backward = _backward
 
 def _backward_sub(a: Tensor, b: Tensor, result: Tensor) -> None:
     def _backward() -> None:
-        a.grad += _sum_to_shape(result.grad * 1, a.grad)
-        b.grad += _sum_to_shape(result.grad * -1, b.grad)
+        a.grad += _sum_to_shape(result.grad * 1, a.shape)
+        b.grad += _sum_to_shape(result.grad * -1, b.shape)
     result._backward = _backward
 
 def _backward_mul(a: Tensor, b: Tensor, result: Tensor) -> None:
     def _backward() -> None:
-        a.grad += _sum_to_shape(result.grad * b.data, a.grad)
-        b.grad += _sum_to_shape(result.grad * a.data, b.grad)
+        a.grad += _sum_to_shape(result.grad * b.data, a.shape)
+        b.grad += _sum_to_shape(result.grad * a.data, b.shape)
     result._backward = _backward
 
 def _backward_div(a: Tensor, b: Tensor, result: Tensor) -> None:
     def _backward() -> None:
-        a.grad += _sum_to_shape(result.grad * (1 / b.data), a.grad)
-        b.grad += _sum_to_shape(result.grad * (a.data * -(1 / (b.data**2))), b.grad)
+        a.grad += _sum_to_shape(result.grad * (1 / b.data), a.shape)
+        b.grad += _sum_to_shape(result.grad * (a.data * -(1 / (b.data**2))), b.shape)
     result._backward = _backward
 
 def _backward_matmul(a: Tensor, b: Tensor, result: Tensor) -> None:
@@ -91,11 +90,11 @@ def _backward_matmul(a: Tensor, b: Tensor, result: Tensor) -> None:
             b.grad += np.outer(result.grad, a.data)
         #* Mat-mat product or ten-ten product
         else:
-            #! This is mathematically incorrect. But this is standard in ML implementations.   
+            #! This is mathematically incorrect, is standard in ML implementations, since matrices are often batched.   
             grad_a = result.grad @ b.data.swapaxes(-2, -1)
             grad_b = a.data.swapaxes(-2, -1) @ result.grad
-            a.grad += _sum_to_shape(grad_a, a.grad)
-            b.grad += _sum_to_shape(grad_b, b.grad)
+            a.grad += _sum_to_shape(grad_a, a.shape)
+            b.grad += _sum_to_shape(grad_b, b.shape)
     result._backward = _backward
 
 def _backward_neg(a: Tensor, result: Tensor) -> None:
@@ -128,7 +127,7 @@ def _perform_in_op(a: Tensor | tdata, b: Tensor | tdata, func: Callable[[np.ndar
     return a
 
 class Tensor():
-    def __init__(self, data: tdata, prev: tuple=(), requires_grad: bool=False, dtype: npt.DTypeLike=np.float32):
+    def __init__(self, data: tdata, prev: tuple=(), requires_grad: bool=False, dtype: npt.DTypeLike=np.float32, name: str=''):
         self.data = convert(data=data, dtype=dtype)
         self.grad = np.zeros_like(self.data, dtype=dtype)
         
@@ -139,9 +138,26 @@ class Tensor():
 
         self.shape = self.data.shape
         self.ndim = self.data.ndim
+        self.size = self.data.size
+        self.name = name
 
-    def backward(self, gradient: Optional[np.ndarray]=None) -> None:
-        chain: list[Tensor] = []
+    @classmethod
+    def rand(cls, *shape, name: str='', requires_grad: bool=False, dtype: npt.DTypeLike=np.float32):
+        return cls(data=np.random.rand(*shape), requires_grad=requires_grad, dtype=dtype, name=name)
+    
+    @classmethod
+    def zeros(cls, shape: tuple, name: str='', requires_grad: bool=False,dtype: npt.DTypeLike=np.float32):
+        return cls(data=np.zeros(shape), requires_grad=requires_grad, dtype=dtype, name=name)
+    
+    @classmethod
+    def ones(cls, shape: tuple, name: str='', requires_grad: bool=False,dtype: npt.DTypeLike=np.float32):
+        return cls(data=np.ones(shape), requires_grad=requires_grad, dtype=dtype, name=name)
+
+    def set_name(self, name: str) -> None:
+        self.name = name
+
+    def get_antecedents(self):
+        antecedents: list[Tensor] = []
         visit: set[Tensor] = set()
 
         def build(t: Tensor) -> None:
@@ -150,22 +166,38 @@ class Tensor():
             visit.add(t)
             for t_prev in t.prev:
                 build(t_prev)
-            chain.append(t)
+            antecedents.append(t)
+
+        build(self)
+        antecedents.reverse()
+        return antecedents
+
+    def backward(self, gradient: Optional[np.ndarray]=None) -> list[Tensor]:
+        antecedents = self.get_antecedents()
         
         if gradient:
             self.grad = gradient
         else:
             self.grad = np.ones_like(self.data, dtype=self.dtype)
 
-        build(self)
-        for t in reversed(chain):
+        for t in antecedents:
             t._backward()
+        return antecedents
+    
+    def reset_grad(self, grad: Optional[np.ndarray]=None):
+        if grad:
+            self.grad = grad
+        self.grad = np.zeros(shape=self.shape, dtype=self.dtype)
 
     def transpose(self) -> Tensor:
         result = Tensor(self.data.T, prev=(self,), requires_grad=self.requires_grad, dtype=self.dtype)
         if result.requires_grad:
             _backward_transpose(self, result)
         return result
+    
+    def step(self, scale: float) -> None:
+        if self.requires_grad:
+            self.data += self.grad * scale
 
     def __add__(self, other: Tensor | tdata) -> Tensor:
         return _perform_op(self, other, func=lambda a, b: a + b, backward_func=_backward_sum, dtype=self.dtype)
@@ -224,4 +256,4 @@ class Tensor():
         return result
 
     def __repr__(self) -> str:
-        return f'Tensor({self.data})'
+        return f'{self.name}_Tensor({self.data})'
