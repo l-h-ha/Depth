@@ -74,6 +74,12 @@ def _backward_div(a: Tensor, b: Tensor, result: Tensor) -> None:
         b.grad += _sum_to_shape(result.grad * (a.data * -(1 / (b.data**2))), b.shape)
     result._backward = _backward
 
+def _backward_pow(a: Tensor, b: Tensor, result: Tensor) -> None:
+    def _backward() -> None:
+        a.grad += _sum_to_shape(result.grad * b.data*a.data**(b.data-1), a.shape)
+        b.grad += _sum_to_shape(result.grad * a.data**b.data*np.log(a.data), b.shape)
+    result._backward = _backward
+
 def _backward_matmul(a: Tensor, b: Tensor, result: Tensor) -> None:
     def _backward() -> None:
         #* Vec-vec product
@@ -152,6 +158,10 @@ class Tensor():
     @classmethod
     def ones(cls, shape: tuple, name: str='', requires_grad: bool=False,dtype: npt.DTypeLike=np.float32):
         return cls(data=np.ones(shape), requires_grad=requires_grad, dtype=dtype, name=name)
+    
+    @classmethod
+    def ndarray(cls, ndarray: np.ndarray, name: str='', requires_grad: bool=False, dtype: npt.DTypeLike=np.float32):
+        return cls(data=ndarray, requires_grad=requires_grad, dtype=dtype, name=name)
 
     def set_name(self, name: str) -> None:
         self.name = name
@@ -201,53 +211,50 @@ class Tensor():
 
     def __add__(self, other: Tensor | tdata) -> Tensor:
         return _perform_op(self, other, func=lambda a, b: a + b, backward_func=_backward_sum, dtype=self.dtype)
-    
     def __radd__(self, other: Tensor | tdata) -> Tensor:
         return _perform_op(other, self, func=lambda a, b: b + a, backward_func=_backward_sum, dtype=self.dtype)
-    
     def __iadd__(self, other: Tensor | tdata) -> Tensor:
         return _perform_in_op(self, other, func=lambda a, b: a + b, dtype=self.dtype)
-    
+
 
     def __sub__(self, other: Tensor | tdata) -> Tensor:
         return _perform_op(self, other, func=lambda a, b: a - b, backward_func=_backward_sub, dtype=self.dtype)
-    
     def __rsub__(self, other: Tensor | tdata) -> Tensor:
         return _perform_op(other, self, func=lambda a, b: b - a, backward_func=_backward_sub, dtype=self.dtype)
-
     def __isub__(self, other: Tensor | tdata) -> Tensor:
         return _perform_in_op(self, other, func=lambda a, b: a - b, dtype=self.dtype)
     
 
     def __mul__(self, other: Tensor | tdata) -> Tensor:
         return _perform_op(self, other, func=lambda a, b: a * b, backward_func=_backward_mul, dtype=self.dtype)
-    
     def __rmul__(self, other: Tensor | tdata) -> Tensor:
         return _perform_op(other, self, func=lambda a, b: b * a, backward_func=_backward_mul, dtype=self.dtype)
-
     def __imul__(self, other: Tensor | tdata) -> Tensor:
         return _perform_in_op(self, other, func=lambda a, b: a * b, dtype=self.dtype)
     
 
     def __truediv__(self, other: Tensor | tdata) -> Tensor:
         return _perform_op(self, other, func=lambda a, b: a / b, backward_func=_backward_div, dtype=self.dtype)
-    
     def __rtruediv__(self, other: Tensor | tdata) -> Tensor:
         return _perform_op(other, self, func=lambda a, b: b / a, backward_func=_backward_div, dtype=self.dtype)
-    
     def __itruediv__(self, other: Tensor | tdata) -> Tensor:
         return _perform_in_op(self, other, func=lambda a, b: a / b, dtype=self.dtype)
     
 
+    def __pow__(self, other: Tensor | tdata) -> Tensor:
+        return _perform_op(self, other, func=lambda a, b: a**b, backward_func=_backward_pow, dtype=self.dtype)
+    def __rpow__(self, other: Tensor | tdata) -> Tensor:
+        return _perform_op(other, self, func=lambda a, b: b**a, backward_func=_backward_pow, dtype=self.dtype)
+    def __ipow__(self, other: Tensor | tdata) -> Tensor:
+        return _perform_in_op(self, other, func=lambda a, b: a**b, dtype=self.dtype)
+
+
     def __matmul__(self, other: Tensor | tdata) -> Tensor:
         return _perform_op(self, other, func=lambda a, b: a @ b, backward_func=_backward_matmul, dtype=self.dtype)
-    
     def __rmatmul__(self, other: Tensor | tdata) -> Tensor:
         return _perform_op(other, self, func=lambda a, b: b @ a, backward_func=_backward_matmul, dtype=self.dtype)
-
     def __imatmul__(self, other: Tensor | tdata) -> Tensor:
         return _perform_in_op(self, other, func=lambda a, b: a @ b, dtype=self.dtype)
-    
 
     def __neg__(self):
         result = Tensor(data=-self.data, prev=(self,), requires_grad=self.requires_grad, dtype=self.dtype)

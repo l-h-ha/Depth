@@ -12,11 +12,7 @@ class base_loss(ABC):
 
         if L.requires_grad:
             def _backward() -> None:
-                true_grad, pred_grad = self.backward(y_true, y_pred)
-                
-                if y_true.requires_grad:
-                    y_true.grad += _sum_to_shape(L.grad * true_grad, y_true.shape)
-
+                pred_grad = self.backward(y_true, y_pred)
                 if y_pred.requires_grad:
                     y_pred.grad += _sum_to_shape(L.grad * pred_grad, y_pred.shape)
             L._backward = _backward
@@ -28,5 +24,5 @@ class base_loss(ABC):
         raise NotImplementedError
     
     @abstractmethod
-    def backward(self, y_true: Tensor, y_pred: Tensor) -> tuple[np.ndarray, np.ndarray]:
+    def backward(self, y_true: Tensor, y_pred: Tensor) -> np.ndarray:
         raise NotImplementedError

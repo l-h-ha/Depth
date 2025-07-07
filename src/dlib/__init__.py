@@ -1,2 +1,3 @@
 from ._tensor import Tensor
-from ._typing import *
+from .typing import *
+from .constants import *

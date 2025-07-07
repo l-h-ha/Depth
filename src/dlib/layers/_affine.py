@@ -1,7 +1,7 @@
 from ._base_layer import base_layer
 from .. import Tensor
 
-from .. import _typing as typ
+from .. import typing as typ
 
 class Affine(base_layer):
     def __init__(self, units: int, dtype: typ.DTypeLike=typ.float32) -> None:

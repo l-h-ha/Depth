@@ -19,7 +19,7 @@ class base_activation(ABC):
 
         if Y.requires_grad:
             def _backward() -> None:
-                local_grad = self.backward(X, Y.grad)
+                local_grad = self.backward(preactivation=X, grad=Y.grad)
                 X.grad += _sum_to_shape(local_grad, X.shape)
             Y._backward = _backward
                 

@@ -1,7 +1,7 @@
 from ._base_model import base_model
 from .. import Tensor
 
-from .. import _typing as typ
+from .. import typing as typ
 
 class Stack(base_model):
     def __init__(self, layers: list) -> None:
