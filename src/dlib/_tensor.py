@@ -133,7 +133,7 @@ def _perform_in_op(a: Tensor | tdata, b: Tensor | tdata, func: Callable[[np.ndar
     b = b if isinstance(b, Tensor) else Tensor(data=convert(b, dtype=dtype), dtype=dtype)
 
     if a.requires_grad or b.requires_grad:
-        raise RuntimeError("In-place operations must not be performed on tensor objects.")
+        raise RuntimeError("In-place operations must not be performed on differentiatable tensor objects.")
 
     a.data = func(a.data, b.data)
     return a
