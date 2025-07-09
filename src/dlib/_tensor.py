@@ -19,15 +19,6 @@ def convert(data: tdata, dtype: npt.DTypeLike) -> np.ndarray:
         raise ValueError(f'Unsupported datatype for conversion: {type(data)}')
 
 def _sum_to_shape(grad: np.ndarray, target_shape: tuple) -> np.ndarray:
-    '''
-    Broadcasts/reduces grad to a given shape.
-
-    Compare both shapes:
-    grad: (D0, D1, ..., DN)
-    target: (D0, D1, ..., DM)
-        
-    '''
-    
     if grad.shape == target_shape:
         return grad
     
@@ -113,6 +104,21 @@ def _backward_transpose(a: Tensor, result: Tensor) -> None:
         a.grad += result.grad.T
     result._backward = _backward
 
+def _backward_mean(a: Tensor, result: Tensor, axis: Optional[Union[tuple, int]]=None, keepdims: bool=False) -> None:
+    if axis is None:
+        N = np.prod(a.shape)
+    elif isinstance(axis, int):
+        N = a.shape[axis]
+    elif isinstance(axis, tuple):
+        N = np.prod([a.shape[i] for i in axis]) 
+
+    def _backward() -> None:
+        grad = result.grad
+        if not keepdims and axis is not None:
+            grad = np.expand_dims(grad, axis=axis)
+        a.grad += grad / N
+    result._backward = _backward
+
 def _perform_op(a: Tensor | tdata, b: Tensor | tdata, func: Callable[[np.ndarray, np.ndarray], np.ndarray], backward_func: Callable[[Tensor, Tensor, Tensor], None], dtype: npt.DTypeLike) -> Tensor:
     a = a if isinstance(a, Tensor) else Tensor(data=convert(a, dtype=dtype), requires_grad=False, dtype=dtype)
     b = b if isinstance(b, Tensor) else Tensor(data=convert(b, dtype=dtype), requires_grad=False, dtype=dtype)
@@ -163,6 +169,10 @@ class Tensor():
     def ndarray(cls, ndarray: np.ndarray, name: str='', requires_grad: bool=False, dtype: npt.DTypeLike=np.float32):
         return cls(data=ndarray, requires_grad=requires_grad, dtype=dtype, name=name)
 
+    ##
+    ##
+    ##
+
     def set_name(self, name: str) -> None:
         self.name = name
 
@@ -199,15 +209,40 @@ class Tensor():
             self.grad = grad
         self.grad = np.zeros(shape=self.shape, dtype=self.dtype)
 
-    def transpose(self) -> Tensor:
-        result = Tensor(self.data.T, prev=(self,), requires_grad=self.requires_grad, dtype=self.dtype)
+    def step(self, scale: float) -> None:
+        if self.requires_grad:
+            self.data += self.grad * scale
+
+    ##
+    ##
+    ##
+
+    def transpose(self, requires_grad: Optional[bool]=None) -> Tensor:
+        if requires_grad is not None:
+            requires_grad = self.requires_grad and requires_grad
+        else:
+            requires_grad = self.requires_grad
+
+        result = Tensor(self.data.T, prev=(self,), requires_grad=requires_grad, dtype=self.dtype)
         if result.requires_grad:
             _backward_transpose(self, result)
         return result
     
-    def step(self, scale: float) -> None:
-        if self.requires_grad:
-            self.data += self.grad * scale
+    def mean(self, requires_grad: Optional[bool]=None, axis: Optional[Union[tuple, int]]=None, keepdims: bool=False) -> Tensor:
+        if requires_grad is not None:
+            requires_grad = self.requires_grad and requires_grad
+        else:
+            requires_grad = self.requires_grad
+
+        result = Tensor(self.data.mean(axis=axis, dtype=self.dtype, keepdims=keepdims), prev=(self,), requires_grad=requires_grad, dtype=self.dtype)
+        if requires_grad:
+            _backward_mean(self, result, axis, keepdims)
+        return result
+
+
+    ##
+    ##
+    ##
 
     def __add__(self, other: Tensor | tdata) -> Tensor:
         return _perform_op(self, other, func=lambda a, b: a + b, backward_func=_backward_sum, dtype=self.dtype)

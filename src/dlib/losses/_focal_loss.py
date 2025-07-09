@@ -2,8 +2,9 @@
 https://arxiv.org/pdf/1708.02002 "Focal Loss for Dense Object Detection"
 '''
 
-from .. import Tensor, EPSILON
+from .. import Tensor
 from ._base_loss import base_loss
+from ..constants import EPSILON
 
 import numpy as np
 
@@ -14,7 +15,7 @@ class FocalLoss(base_loss):
         self.axis = axis
 
     def call(self, y_true: Tensor, y_pred: Tensor) -> Tensor:
-        p_t = np.sum(y_true.data * y_pred.data, axis=self.axis, keepdims=True)
+        p_t = np.sum(y_true.data * y_pred.data, axis=-1)
         p_t = np.clip(p_t, EPSILON, 1.-EPSILON)
         
         '''
@@ -29,8 +30,8 @@ class FocalLoss(base_loss):
         '''
         The paper never diffrentiated dFL/dp_t, only dFL/dx (logits).
         Deriving the former we get:
-        dFL/dp_t =a(1-p)**(g-1)(g*log(p)- (1-p)/p)
+        dFL/dp_t =a(1-p)**(g-1)(g*log(p) - (1-p)/p)
         '''
-        p_t = np.sum(y_true.data * y_pred.data, axis=self.axis, keepdims=True)
+        p_t = y_true.data * y_pred.data
         p_t = np.clip(p_t, EPSILON, 1.-EPSILON)
-        return y_true * self.alpha * (1 - p_t)**(self.gamma - 1) * (self.gamma * np.log(p_t) - (1 - p_t) / p_t)
+        return y_true.data * self.alpha * (1 - p_t)**(self.gamma - 1) * (self.gamma * np.log(p_t) - (1 - p_t) / p_t)

@@ -1,8 +1,6 @@
 from abc import ABC, abstractmethod
-from typing import Optional
 
-from .. import Tensor
-from .._tensor import _sum_to_shape
+from .._tensor import Tensor, _sum_to_shape
 
 import numpy as np
 
@@ -14,7 +12,7 @@ class base_loss(ABC):
             def _backward() -> None:
                 pred_grad = self.backward(y_true, y_pred)
                 if y_pred.requires_grad:
-                    y_pred.grad += _sum_to_shape(L.grad * pred_grad, y_pred.shape)
+                    y_pred.grad += _sum_to_shape(L.grad.reshape((L.shape[0], 1)) * pred_grad, y_pred.shape)
             L._backward = _backward
 
         return L
