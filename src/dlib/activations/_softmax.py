@@ -7,6 +7,7 @@ import numpy as np
 
 class Softmax(base_activation):
     def __init__(self, axis: Optional[int]=None, stable: bool=True):
+        super().__init__()
         self.axis = axis
         self.stable = stable
 
@@ -16,6 +17,8 @@ class Softmax(base_activation):
         return Tensor(data=e_x / np.sum(e_x, axis=axis, keepdims=True), prev=(X,), requires_grad=X.requires_grad, dtype=X.dtype)
 
     def backward(self, preactivation: Tensor, grad: np.ndarray) -> np.ndarray:
-        s = self.call(preactivation).data
+        s = self.activated
+        if s is None:
+            raise RuntimeError("Loss function must be called before differentiating.")
         axis = self.axis if self.axis is not None else len(s.shape) - 1
         return s * (grad - np.sum(grad * s, axis=axis, keepdims=True))

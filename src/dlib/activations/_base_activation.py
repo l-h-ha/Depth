@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from typing import Optional
 
 from .. import Tensor
 from .._tensor import _sum_to_shape
@@ -6,6 +7,9 @@ from .._tensor import _sum_to_shape
 import numpy as np
 
 class base_activation(ABC):
+    def __init__(self) -> None:
+        self.activated: Optional[Tensor] = None
+
     @abstractmethod
     def call(self, X: Tensor) -> Tensor:
         raise NotImplementedError
@@ -16,6 +20,7 @@ class base_activation(ABC):
 
     def __call__(self, X: Tensor):
         Y = self.call(X)
+        self.activated = Y
 
         if Y.requires_grad:
             def _backward() -> None:
