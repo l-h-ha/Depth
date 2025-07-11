@@ -1,9 +1,9 @@
-from ..dlib.models import Stack
-from ..dlib.layers import Input, AffineMap
-from ..dlib.activations import LeakyReLU, Softmax
-from ..dlib.losses import FocalLoss, CategorialCrossEntropy, MeanSquaredError, MeanAbsoluteError
+from ..Depth.models import Stack
+from ..Depth.layers import Input, AffineMap
+from ..Depth.activations import LeakyReLU, Softmax
+from ..Depth.losses import FocalLoss, CategorialCrossEntropy, MeanSquaredError, MeanAbsoluteError
 
-from ..dlib import Tensor
+from ..Depth import Tensor
 
 model = Stack([
     Input(shape=(3, 3)),

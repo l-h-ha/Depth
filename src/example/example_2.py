@@ -1,5 +1,5 @@
-from ..dlib import Tensor
-from ..dlib.activations._identity import Identity
+from ..Depth import Tensor
+from ..Depth.activations._identity import Identity
 
 iden = Identity()
 
