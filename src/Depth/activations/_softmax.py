@@ -1,7 +1,9 @@
 from typing import Optional
 
 from .. import Tensor
+
 from ._base_activation import base_activation
+from ..exceptions import GradientComputeError
 
 import numpy as np
 
@@ -19,6 +21,6 @@ class Softmax(base_activation):
     def backward(self, preactivation: Tensor, grad: np.ndarray) -> np.ndarray:
         s = self.activated
         if s is None:
-            raise RuntimeError("Loss function must be called before differentiating.")
+            raise GradientComputeError("Loss function must be called before differentiating.")
         axis = self.axis if self.axis is not None else len(s.shape) - 1
         return s * (grad - np.sum(grad * s, axis=axis, keepdims=True))

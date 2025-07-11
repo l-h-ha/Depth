@@ -1,5 +1,7 @@
 from .. import Tensor
+
 from ._base_activation import base_activation
+from ..exceptions import GradientComputeError
 
 import numpy as np
 
@@ -12,5 +14,5 @@ class Sigmoid(base_activation):
 
     def backward(self, preactivation: Tensor, grad: np.ndarray) -> np.ndarray:
         if self.activated is None:
-            raise RuntimeError("Loss function must be called before differentiating.")
+            raise GradientComputeError("Loss function must be called before differentiating.")
         return grad * self.activated.data * (1 - self.activated.data)
