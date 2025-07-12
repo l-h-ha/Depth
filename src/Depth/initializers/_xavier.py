@@ -7,4 +7,5 @@ class Xavier(base_initializer):
         super().__init__(requires_grad=requires_grad, dtype=dtype)
 
     def call(self, input_shape: tuple[int, ...]) -> np.ndarray:
-        return np.random.randn(*input_shape) * np.sqrt(2 / (input_shape[0] + input_shape[1]))
+        limit = np.sqrt(6.0 / (sum(input_shape)))
+        return np.random.uniform(low=-limit, high=limit, size=input_shape)
