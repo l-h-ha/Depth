@@ -2,6 +2,7 @@ from ..Depth.models import Stack
 from ..Depth.layers import Input, AffineMap
 from ..Depth.activations import LeakyReLU, Softmax
 from ..Depth.losses import FocalLoss, CategorialCrossEntropy, MeanSquaredError, MeanAbsoluteError
+from ..Depth.initializers import Xavier
 
 from ..Depth import Tensor
 
