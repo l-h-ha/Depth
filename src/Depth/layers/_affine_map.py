@@ -15,7 +15,7 @@ class AffineMap(base_layer):
         initializer.set_dtype(dtype=dtype)
 
     def build(self, input_shape: tuple[int, ...]) -> None:
-        self.w = self.initializer(input_shape=(input_shape[0], self.units))
+        self.w = self.initializer(input_shape=(input_shape[1], self.units))
         self.b = Tensor.zeros(shape=(self.units,), dtype=self.dtype, requires_grad=True)
         self.params.append(self.w)
         self.params.append(self.b)
