@@ -11,7 +11,7 @@ def convert(data: tdata, dtype: npt.DTypeLike) -> np.ndarray:
         if data.dtype == dtype:
             return data
         return data.astype(dtype=dtype)
-    if isinstance(data, (int, float, np.floating, np.integer)):
+    elif isinstance(data, (int, float, np.floating, np.integer)):
         return np.asarray([data]).astype(dtype=dtype)
     elif isinstance(data, (tuple, list)):
         return np.asarray(data).astype(dtype=dtype)
@@ -175,6 +175,13 @@ class Tensor():
 
     def set_name(self, name: str) -> None:
         self.name = name
+
+    def set_dtype(self, dtype: npt.DTypeLike) -> None:
+        self.dtype = dtype
+        self.data = self.data.astype(dtype=dtype, copy=False)
+
+    def astype(self, dtype: npt.DTypeLike) -> Tensor:
+        return Tensor(data=self.data, requires_grad=self.requires_grad, dtype=dtype)
 
     def get_antecedents(self):
         antecedents: list[Tensor] = []

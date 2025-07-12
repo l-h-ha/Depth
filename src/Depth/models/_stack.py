@@ -1,7 +1,7 @@
 from ._base_model import base_model
 from .. import Tensor
 
-from .. import typing as typ
+from ..typedef import LossLike
 
 class Stack(base_model):
     def __init__(self, layers: list) -> None:
@@ -13,7 +13,7 @@ class Stack(base_model):
             X = layer(X)
         return X
     
-    def backward(self, Y_true: Tensor, Y_pred: Tensor, loss: typ.LossLike, learning_rate: float) -> Tensor:
+    def backward(self, Y_true: Tensor, Y_pred: Tensor, loss: 'LossLike', learning_rate: float) -> Tensor:
         self.reset_grads()
         L = loss(Y_true, Y_pred)
         L.backward()

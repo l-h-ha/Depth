@@ -23,4 +23,4 @@ class Softmax(base_activation):
         if s is None:
             raise GradientComputeError("Loss function must be called before differentiating.")
         axis = self.axis if self.axis is not None else len(s.shape) - 1
-        return s * (grad - np.sum(grad * s, axis=axis, keepdims=True))
+        return s.data * (grad - np.sum(grad * s.data, axis=axis, keepdims=True))
