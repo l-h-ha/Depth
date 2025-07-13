@@ -251,6 +251,16 @@ class Tensor():
     ##
     ##
 
+    def __getitem__(self, key):
+        return self.data[key]
+    
+    def __setitem__(self, key, val):
+        self.data[key] = val
+
+    ##
+    ##
+    ##
+
     def __add__(self, other: Tensor | tdata) -> Tensor:
         return _perform_op(self, other, func=lambda a, b: a + b, backward_func=_backward_sum, dtype=self.dtype)
     def __radd__(self, other: Tensor | tdata) -> Tensor:
