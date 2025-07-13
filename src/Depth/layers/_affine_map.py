@@ -6,7 +6,7 @@ from .. import Tensor
 from ..typedef import ActivationLike, InitializerLike, DTypeLike, float32
 
 class AffineMap(base_layer):
-    def __init__(self, units: int, activation: 'ActivationLike', initializer: 'InitializerLike'=Uniform(), dtype: 'DTypeLike'=float32) -> None:
+    def __init__(self, units: int, activation: ActivationLike, initializer: InitializerLike=Uniform(), dtype: DTypeLike=float32) -> None:
         super().__init__()
         self.units = units
         self.dtype = dtype
