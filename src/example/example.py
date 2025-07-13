@@ -1,7 +1,6 @@
 import numpy as np
 import requests
 import io
-import time
 
 URL = "https://raw.githubusercontent.com/l-h-ha/MNIST_SET/refs/heads/main/mnist_train_1.csv"
 
@@ -39,8 +38,6 @@ from ..Depth.activations import LeakyReLU, Softmax
 from ..Depth.losses import FocalLoss
 from ..Depth.initializers import He
 
-from ..Depth import Tensor
-
 model = Stack([
     Input(shape=(batch_size, 784)),
     AffineMap(units=32, activation=LeakyReLU(), initializer=He()),
@@ -49,14 +46,4 @@ model = Stack([
 ])
 
 epochs = 10
-
-for epoch in range(epochs):
-    for batch_n in range(num_batches):
-        y_pred = model.forward(Tensor(
-            data=batched_pixels[batch_n], requires_grad=True
-            ))
-        loss = model.backward(
-            Y_true=Tensor(batched_y_true[batch_n]), Y_pred=y_pred,
-            loss=FocalLoss(), learning_rate=1e-3
-        )
-        print(f"[Epoch {epoch + 1} / Batch {batch_n + 1}] Loss: {loss.mean().data[0]}")
+model.fit(batched_pixels, batched_y_true, FocalLoss(), epochs, 0.001)
