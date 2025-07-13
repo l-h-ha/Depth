@@ -31,7 +31,7 @@ class Stack(base_model):
 
                 y_pred = self.call(batch_train_x)
                 loss_tensor = self.backward(batch_train_Y, y_pred, loss, learning_rate)
-                print(f"[Epoch {epoch} / Batch {batch_n}] Loss: {loss_tensor.mean().data[0]}")
+                print(f"[Epoch {epoch} / Batch {batch_n}] Loss: {loss_tensor.mean()[0]}")
 
 
     def forward(self, X: Tensor) -> Tensor:
