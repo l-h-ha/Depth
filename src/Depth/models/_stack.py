@@ -1,53 +1,68 @@
 from ._base_model import base_model
 from .. import Tensor
 
-from ..typedef import LossLike
+from ..typedef import LossLike, OptimizerLike, LayerLike
+from ..exceptions import BatchCalculationError
 
 import numpy as np
 
 class Stack(base_model):
-    def __init__(self, layers: list) -> None:
+    def __init__(self, layers: list[LayerLike]) -> None:
         super().__init__()
         self.layers = layers
-
-    def reset_grads(self) -> None:
-        for layer in self.layers:
-            for param in layer.params:
-                param.reset_grad()
 
     def call(self, X: Tensor) -> Tensor:
         return self.forward(X)
 
-    def fit(self, X_train: np.ndarray, Y_train: np.ndarray, loss: LossLike, epoch: int, learning_rate: float):
-        batch_num = X_train.shape[0]
+    def build(self) -> None:
+        for layer in self.layers:
+            self.parameters.extend(layer.parameters)
 
-        for epoch in range(epoch):
-            for batch_n in range(batch_num):
-                batch_train_x = X_train[batch_n]
-                batch_train_x= Tensor(data=batch_train_x, requires_grad=True, dtype=batch_train_x.dtype)
-                
-                batch_train_y = Y_train[batch_n]
-                batch_train_Y = Tensor(data=batch_train_y, dtype=batch_train_y.dtype)
+    def fit(self, X: np.ndarray, Y: np.ndarray, loss: LossLike, optimizer: OptimizerLike, batch_size: int, epochs: int=1, ignore_remainder: bool=True):
+        num_samples = X.shape[0]
 
-                y_pred = self.call(batch_train_x)
-                loss_tensor = self.backward(batch_train_Y, y_pred, loss, learning_rate)
-                print(f"[Epoch {epoch} / Batch {batch_n}] Loss: {loss_tensor.mean()[0]}")
+        if batch_size == -1:
+            batch_size = num_samples
 
+        if num_samples % batch_size != 0 and not ignore_remainder:
+            raise BatchCalculationError(f"The amount of samples in the dataset ({num_samples}) must be divisible by batch_size ({batch_size}).")
+        if Y.shape[0] % batch_size != 0 and not ignore_remainder:
+            raise BatchCalculationError(f"The amount of labels in the dataset ({Y.shape[0]}) must be divisible by batch_size ({batch_size}).")
+
+        if not self._built:
+            self._built = True
+            self.build()
+
+        for epoch_n in range(epochs):
+            epoch_loss = Tensor([0])
+            batch_num = 0
+
+            for batch_n in range(0, num_samples, batch_size):
+                end = batch_n + batch_size
+                batch_X, batch_Y = X[batch_n:end], Y[batch_n:end]
+
+                if ignore_remainder and (batch_X.shape[0] != batch_size or batch_Y.shape[0] != batch_size):
+                    continue
+                batch_num += 1
+
+                y_pred = self.call(Tensor(batch_X, dtype=batch_X.dtype))
+                y_true = Tensor(data=batch_Y, dtype=batch_Y.dtype)
+
+                L = loss(y_true, y_pred)
+                optimizer.zero_grad()
+                optimizer(L.backward())
+                epoch_loss = epoch_loss + L
+
+            if batch_num > 0:
+                epoch_loss = epoch_loss / batch_num
+                print(f"[Epoch {epoch_n} | Batch count {batch_num}] Loss: {epoch_loss.mean()[0]}")
+            
+
+    ###
+    ###
+    ###
 
     def forward(self, X: Tensor) -> Tensor:
         for layer in self.layers:
             X = layer(X)
         return X
-    
-    def backward(self, Y_true: Tensor, Y_pred: Tensor, loss: 'LossLike', learning_rate: float) -> Tensor:
-        self.reset_grads()
-        L = loss(Y_true, Y_pred)
-        L.backward()
-        self.step(learning_rate)
-        return L
-    
-    def step(self, learning_rate: float):
-        for layer in self.layers:
-            for param in layer.params:
-                param.step(-learning_rate)
-    

@@ -13,11 +13,11 @@ class Affine(base_layer):
         self.initializer = initializer
         initializer.set_dtype(dtype=dtype)
 
-    def build(self, input_shape: tuple[int, ...]) -> None:
-        self.w = self.initializer(input_shape=(input_shape[0], self.units))
+    def build(self, in_shape: tuple[int, ...]) -> None:
+        self.w = self.initializer(input_shape=(in_shape[1], self.units))
         self.b = Tensor.zeros(shape=(self.units,), requires_grad=True, dtype=self.dtype)
-        self.params.append(self.w)
-        self.params.append(self.b)
+        self.parameters.append(self.w)
+        self.parameters.append(self.b)
 
     def call(self, X: Tensor) -> Tensor:
         return X @ self.w + self.b

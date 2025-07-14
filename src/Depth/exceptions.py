@@ -1,5 +1,20 @@
 class BaseError(Exception):
     pass
 
-class GradientComputeError(BaseError):
+###
+###
+
+class ComputationError(BaseError):
+    pass
+
+class BatchCalculationError(ComputationError):
+    pass
+
+class GradientComputeError(ComputationError):
+    pass
+
+###
+###
+
+class ComponentNotBuiltError(BaseError):
     pass

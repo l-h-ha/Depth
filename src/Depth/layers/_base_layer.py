@@ -1,13 +1,16 @@
 from abc import ABC, abstractmethod
+from typing import Optional
+
 from .. import Tensor
+from ..exceptions import ComponentNotBuiltError
 
 class base_layer(ABC):
     def __init__(self) -> None:
+        self.parameters: list[Tensor] = []
         self._built = False
-        self.params: list[Tensor] = []
     
     @abstractmethod
-    def build(self, input_shape: tuple) -> None:
+    def build(self, in_shape: tuple[int, ...]) -> None:
         raise NotImplementedError
 
     @abstractmethod
@@ -16,6 +19,6 @@ class base_layer(ABC):
 
     def __call__(self, X: Tensor) -> Tensor:
         if not self._built:
-            self.build(X.shape)
             self._built = True
+            self.build(X.shape)
         return self.call(X)

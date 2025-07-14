@@ -15,18 +15,15 @@ csv_content_bytes = get_content_bytes(URL=URL)
 np_array = np.loadtxt(io.BytesIO(csv_content_bytes), delimiter=",", dtype=int)
 
 labels = np_array[:, 0]
-pixels = np_array[:, 1:]
+pixels = np_array[:, 1:].astype(np.float32)/255.0
 
 num_samples = labels.shape[0]
 
 y_true = np.zeros((num_samples, 10), dtype=np.float32)
-y_true[np.arange(num_samples), labels] = 1
+y_true[np.arange(num_samples), labels] = 1.
+y_true = y_true.astype(np.float32)
 
-batch_size = 20
-num_batches = num_samples // batch_size
-
-batched_y_true = y_true.reshape((num_batches, batch_size, 10)).astype(np.float32)
-batched_pixels = (pixels.reshape((num_batches, batch_size, 784)).astype(np.float32) / 255) - 0.5
+batch_size = 100
 
 ##
 ##
@@ -37,13 +34,21 @@ from ..Depth.layers import Input, AffineMap
 from ..Depth.activations import LeakyReLU, Softmax
 from ..Depth.losses import FocalLoss
 from ..Depth.initializers import He
+from ..Depth.optimizers import GradientDescent
 
 model = Stack([
-    Input(shape=(batch_size, 784)),
+    Input(shape=(784,)),
     AffineMap(units=32, activation=LeakyReLU(), initializer=He()),
     AffineMap(units=16, activation=LeakyReLU(), initializer=He()),
     AffineMap(units=10, activation=Softmax(stable=True), initializer=He())
 ])
 
-epochs = 10
-model.fit(batched_pixels, batched_y_true, FocalLoss(), epochs, 0.001)
+epochs = 50
+model.fit(
+    X=pixels, 
+    Y=y_true, 
+    loss=FocalLoss(gamma=3), 
+    optimizer=GradientDescent(learning_rate=1e-5),
+    batch_size=-1,
+    epochs=epochs
+    )

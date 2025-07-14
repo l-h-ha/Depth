@@ -216,10 +216,6 @@ class Tensor():
             self.grad = grad
         self.grad = np.zeros(shape=self.shape, dtype=self.dtype)
 
-    def step(self, scale: float) -> None:
-        if self.requires_grad:
-            self.data += self.grad * scale
-
     ##
     ##
     ##
