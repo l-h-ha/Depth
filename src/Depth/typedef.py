@@ -7,12 +7,14 @@ if TYPE_CHECKING:
     from .initializers._base_initializer import base_initializer
     from .optimizers._base_optimizer import base_optimizer
     from .layers._base_layer import base_layer
+    from .models._base_model import base_model
 
 LayerLike: TypeAlias = 'base_layer'
 ActivationLike: TypeAlias = 'base_activation'
 LossLike: TypeAlias = 'base_loss'
 InitializerLike: TypeAlias = 'base_initializer'
 OptimizerLike: TypeAlias = 'base_optimizer'
+ModelLike: TypeAlias = 'base_model'
 
 import numpy as np
 DTypeLike: TypeAlias = np.typing.DTypeLike

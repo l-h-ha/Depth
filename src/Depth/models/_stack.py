@@ -14,48 +14,45 @@ class Stack(base_model):
     def call(self, X: Tensor) -> Tensor:
         return self.forward(X)
 
-    def build(self) -> None:
-        for layer in self.layers:
-            self.parameters.extend(layer.parameters)
-
-    def fit(self, X: np.ndarray, Y: np.ndarray, loss: LossLike, optimizer: OptimizerLike, batch_size: int, epochs: int=1, ignore_remainder: bool=True):
+    def fit(self, X: np.ndarray, Y: np.ndarray, loss: LossLike, optimizer: OptimizerLike, batch_size: int, learning_rate: float, epochs: int=1, ignore_remainder: bool=True, logging: bool=True):
         num_samples = X.shape[0]
+        num_labels = Y.shape[0]
 
-        if batch_size == -1:
-            batch_size = num_samples
-
+        if num_labels != num_samples:
+            raise BatchCalculationError(f"The number of samples ({num_samples}) and labels ({num_labels}) must match.")
         if num_samples % batch_size != 0 and not ignore_remainder:
             raise BatchCalculationError(f"The amount of samples in the dataset ({num_samples}) must be divisible by batch_size ({batch_size}).")
-        if Y.shape[0] % batch_size != 0 and not ignore_remainder:
-            raise BatchCalculationError(f"The amount of labels in the dataset ({Y.shape[0]}) must be divisible by batch_size ({batch_size}).")
+        if num_labels % batch_size != 0 and not ignore_remainder:
+            raise BatchCalculationError(f"The amount of labels in the dataset ({num_labels}) must be divisible by batch_size ({batch_size}).")
 
-        if not self._built:
-            self._built = True
-            self.build()
+        batch_num = num_samples // batch_size
 
-        for epoch_n in range(epochs):
+        for epoch in range(epochs):
+            permutation = np.random.permutation(num_samples)
+            X_shuffled, Y_shuffled = X[permutation], Y[permutation]
+
             epoch_loss = Tensor([0])
-            batch_num = 0
 
-            for batch_n in range(0, num_samples, batch_size):
-                end = batch_n + batch_size
-                batch_X, batch_Y = X[batch_n:end], Y[batch_n:end]
+            for batch_n in range(batch_num):
+                start = batch_n * batch_size
+                end = start + batch_size
+                batch_X, batch_Y = X_shuffled[start:end], Y_shuffled[start:end]
 
                 if ignore_remainder and (batch_X.shape[0] != batch_size or batch_Y.shape[0] != batch_size):
                     continue
-                batch_num += 1
 
-                y_pred = self.call(Tensor(batch_X, dtype=batch_X.dtype))
+                y_pred = self.forward(Tensor(batch_X, dtype=batch_X.dtype))
                 y_true = Tensor(data=batch_Y, dtype=batch_Y.dtype)
 
                 L = loss(y_true, y_pred)
-                optimizer.zero_grad()
-                optimizer(L.backward())
-                epoch_loss = epoch_loss + L
-
-            if batch_num > 0:
-                epoch_loss = epoch_loss / batch_num
-                print(f"[Epoch {epoch_n} | Batch count {batch_num}] Loss: {epoch_loss.mean()[0]}")
+                parameters = L.backward()
+                optimizer(parameters, learning_rate)
+                epoch_loss += L
+            
+            processed_batch_n = batch_num if not ignore_remainder else (num_samples // batch_size)
+            epoch_loss /= processed_batch_n
+            if logging:
+                print(f"[Epoch: {epoch + 1}/{epochs} | Batch processed: {processed_batch_n}] Loss: {epoch_loss.mean()[0]}")
             
 
     ###

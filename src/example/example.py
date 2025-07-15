@@ -43,12 +43,13 @@ model = Stack([
     AffineMap(units=10, activation=Softmax(stable=True), initializer=He())
 ])
 
-epochs = 50
+epochs = 100
 model.fit(
     X=pixels, 
     Y=y_true, 
-    loss=FocalLoss(gamma=3), 
-    optimizer=GradientDescent(learning_rate=1e-5),
-    batch_size=-1,
-    epochs=epochs
+    loss=FocalLoss(),
+    batch_size=batch_size,
+    optimizer=GradientDescent(),
+    epochs=epochs,
+    learning_rate=1e-6,
     )

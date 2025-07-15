@@ -5,14 +5,9 @@ from .. import Tensor
 class base_model(ABC):
     def __init__(self) -> None:
         self.parameters: list[Tensor] = []
-        self._built = False
     
     @abstractmethod
     def call(self, X: Tensor) -> Tensor:
-        raise NotImplementedError
-
-    @abstractmethod
-    def build(self) -> None:
         raise NotImplementedError
     
     @abstractmethod
