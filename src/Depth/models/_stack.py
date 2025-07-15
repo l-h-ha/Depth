@@ -14,7 +14,7 @@ class Stack(base_model):
     def call(self, X: Tensor) -> Tensor:
         return self.forward(X)
 
-    def fit(self, X: np.ndarray, Y: np.ndarray, loss: LossLike, optimizer: OptimizerLike, batch_size: int, learning_rate: float, epochs: int=1, ignore_remainder: bool=True, logging: bool=True):
+    def fit(self, X: np.ndarray, Y: np.ndarray, loss: LossLike, optimizer: OptimizerLike, batch_size: int, learning_rate: float, epochs: int=1, ignore_remainder: bool=True, logging: bool=True, log_points: int=10):
         num_samples = X.shape[0]
         num_labels = Y.shape[0]
 
@@ -26,8 +26,10 @@ class Stack(base_model):
             raise BatchCalculationError(f"The amount of labels in the dataset ({num_labels}) must be divisible by batch_size ({batch_size}).")
 
         batch_num = num_samples // batch_size
+        logging_str = "[Epoch: {epoch_n}/{epochs} | Progress: {progress:.0f}%] Loss: {loss}"
+        logging_subdivision = batch_num // log_points if log_points > 0 else 1
 
-        for epoch in range(epochs):
+        for epoch_n in range(epochs):
             permutation = np.random.permutation(num_samples)
             X_shuffled, Y_shuffled = X[permutation], Y[permutation]
 
@@ -38,7 +40,8 @@ class Stack(base_model):
                 end = start + batch_size
                 batch_X, batch_Y = X_shuffled[start:end], Y_shuffled[start:end]
 
-                if ignore_remainder and (batch_X.shape[0] != batch_size or batch_Y.shape[0] != batch_size):
+                is_batch_valid = batch_X.shape[0] == batch_size and batch_Y.shape[0] == batch_size
+                if ignore_remainder and not is_batch_valid:
                     continue
 
                 y_pred = self.forward(Tensor(batch_X, dtype=batch_X.dtype))
@@ -48,12 +51,17 @@ class Stack(base_model):
                 parameters = L.backward()
                 optimizer(parameters, learning_rate)
                 epoch_loss += L
-            
-            processed_batch_n = batch_num if not ignore_remainder else (num_samples // batch_size)
-            epoch_loss /= processed_batch_n
-            if logging:
-                print(f"[Epoch: {epoch + 1}/{epochs} | Batch processed: {processed_batch_n}] Loss: {epoch_loss.mean()[0]}")
-            
+
+                is_last_batch = (batch_n == batch_num - 1)
+                is_loggable_batch = (batch_n % logging_subdivision == 0) or is_last_batch
+                if logging and is_loggable_batch:
+                    print(
+                        logging_str.format(
+                            epoch_n=epoch_n + 1, 
+                            epochs=epochs, 
+                            progress=100 * (batch_n + 1) / batch_num, 
+                            loss=(epoch_loss.data / (batch_n + 1)).mean()), end="\r" if not is_last_batch else "\n")
+                
 
     ###
     ###

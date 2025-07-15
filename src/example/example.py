@@ -23,7 +23,6 @@ y_true = np.zeros((num_samples, 10), dtype=np.float32)
 y_true[np.arange(num_samples), labels] = 1.
 y_true = y_true.astype(np.float32)
 
-batch_size = 100
 
 ##
 ##
@@ -44,6 +43,8 @@ model = Stack([
 ])
 
 epochs = 100
+batch_size = 1
+
 model.fit(
     X=pixels, 
     Y=y_true, 
