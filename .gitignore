@@ -3,3 +3,4 @@
 build/
 venv/
 src/Depth.egg-info
+dist/
