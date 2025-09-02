@@ -1,3 +1,4 @@
-from ._xavier import Xavier
-from ._he import He
-from ._uniform import Uniform
+from .he import He
+from .xavier import Xavier
+
+from .uniform import Uniform

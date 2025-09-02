@@ -1,2 +1,1 @@
-from ._stack import Stack
-
+from .stack import Stack
